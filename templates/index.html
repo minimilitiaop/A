@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alphaporno — Web</title>
+<style>
+  :root { --bg:#0b0b10; --panel:#15151d; --line:#242432; --ink:#e8e6ef;
+          --dim:#8b8797; --accent:#c0392b; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--ink);
+         font-family:ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif; }
+  header { position:sticky; top:0; z-index:10; background:rgba(11,11,16,.92);
+           backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
+           padding:14px 20px; display:flex; gap:16px; align-items:center;
+           flex-wrap:wrap; }
+  .brand { font-size:13px; letter-spacing:.32em; text-transform:uppercase;
+           color:var(--dim); }
+  nav { display:flex; gap:6px; flex-wrap:wrap; }
+  nav button { background:transparent; border:1px solid var(--line);
+               color:var(--dim); padding:7px 12px; border-radius:6px;
+               font-size:12px; letter-spacing:.12em; text-transform:uppercase;
+               cursor:pointer; transition:all .15s; }
+  nav button:hover { border-color:var(--accent); color:var(--ink); }
+  nav button.active { background:var(--accent); border-color:var(--accent);
+                      color:#fff; }
+  #search { margin-left:auto; display:flex; gap:6px; }
+  #search input { background:var(--panel); border:1px solid var(--line);
+                  color:var(--ink); padding:7px 12px; border-radius:6px;
+                  width:220px; font-size:13px; outline:none; }
+  #search input:focus { border-color:var(--accent); }
+  #search button { background:var(--accent); border:none; color:#fff;
+                   padding:7px 14px; border-radius:6px; cursor:pointer;
+                   font-size:12px; letter-spacing:.1em; text-transform:uppercase; }
+  main { padding:24px 20px 96px; max-width:1400px; margin:0 auto; }
+  h1 { font-size:clamp(1.6rem,4vw,2.6rem); font-weight:800; letter-spacing:-.02em;
+       margin-bottom:8px; }
+  h1 em { color:var(--accent); font-style:italic; }
+  .lede { color:var(--dim); margin-bottom:32px; max-width:60ch; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+          gap:16px; }
+  .card { background:var(--panel); border:1px solid var(--line);
+          border-radius:10px; overflow:hidden; cursor:pointer;
+          transition:transform .18s,border-color .18s; }
+  .card:hover { transform:translateY(-3px); border-color:var(--accent); }
+  .thumb { aspect-ratio:16/10; background:linear-gradient(135deg,#2a1a24,#1a1420 45%,#0f0d14);
+           background-size:cover; background-position:center; position:relative; }
+  .thumb .tag { position:absolute; bottom:8px; left:8px;
+                background:rgba(0,0,0,.7); border:1px solid var(--line);
+                padding:3px 8px; font-size:10px; letter-spacing:.16em;
+                text-transform:uppercase; border-radius:2px; }
+  .body { padding:12px 14px 16px; }
+  .body h3 { font-size:.95rem; font-weight:600; margin-bottom:4px;
+             overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .body p { font-size:.8rem; color:var(--dim); }
+  .pager { display:flex; justify-content:center; gap:8px; margin:32px 0 0;
+           flex-wrap:wrap; }
+  .pager button { background:var(--panel); border:1px solid var(--line);
+                  color:var(--ink); padding:6px 12px; border-radius:5px;
+                  cursor:pointer; font-size:12px; }
+  .pager button:hover { border-color:var(--accent); }
+  .pager button.active { background:var(--accent); border-color:var(--accent); }
+  .player-wrap { margin-bottom:28px; display:none; }
+  .player-wrap.active { display:block; }
+  video { width:100%; max-height:70vh; background:#000; border-radius:10px;
+          border:1px solid var(--line); }
+  .sources { margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; }
+  .sources a { color:var(--dim); font-size:12px; text-decoration:none;
+               border:1px solid var(--line); padding:5px 10px; border-radius:5px; }
+  .sources a:hover { color:var(--accent); border-color:var(--accent); }
+  #status { color:var(--dim); font-size:12px; margin-bottom:16px; }
+  .empty { color:var(--dim); padding:40px; text-align:center; font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">alphaporno · web</div>
+  <nav id="nav"></nav>
+  <form id="search" onsubmit="doSearch(event)">
+    <input id="q" type="text" placeholder="search…" autocomplete="off">
+    <button type="submit">Go</button>
+  </form>
+</header>
+
+<main>
+  <div id="player" class="player-wrap">
+    <video id="vid" controls playsinline></video>
+    <div id="sources" class="sources"></div>
+  </div>
+
+  <h1 id="h1">Top <em>rated.</em></h1>
+  <p class="lede" id="lede">Curated from alphaporno.com — the plugin's categories, ported to web.</p>
+  <div id="status"></div>
+  <div id="grid" class="grid"></div>
+  <div id="pager" class="pager"></div>
+</main>
+
+<script>
+const SECTIONS = {
+  top:        { label: "Top Rated",    tag: "top" },
+  popular:    { label: "Most Popular", tag: "popular" },
+  longest:    { label: "Longest",      tag: "longest" },
+  channels:   { label: "Channels",     tag: "channel" },
+  categories: { label: "Categories",   tag: "category" },
+};
+
+const state = { section: "top", page: 1, mode: "videos" };
+const $ = s => document.querySelector(s);
+
+function renderNav() {
+  const nav = $("#nav");
+  nav.innerHTML = "";
+  for (const [key, meta] of Object.entries(SECTIONS)) {
+    const b = document.createElement("button");
+    b.textContent = meta.label;
+    b.dataset.section = key;
+    if (key === state.section) b.classList.add("active");
+    b.onclick = () => loadSection(key, 1);
+    nav.appendChild(b);
+  }
+}
+
+function setActive(section) {
+  state.section = section;
+  document.querySelectorAll("nav button").forEach(b =>
+    b.classList.toggle("active", b.dataset.section === section));
+}
+
+function setHeader(title, lede) {
+  $("#h1").innerHTML = title;
+  $("#lede").textContent = lede;
+}
+
+async function loadSection(section, page = 1) {
+  state.page = page;
+  setActive(section);
+  hidePlayer();
+  if (section === "categories") {
+    state.mode = "categories";
+    setHeader("Cate<em>gories.</em>", "Browse the plugin's category index.");
+    await loadCategories();
+  } else if (section === "channels") {
+    state.mode = "channels";
+    setHeader("Chan<em>nels.</em>", "Studios and channels from alphaporno.");
+    await loadPage(section, page);
+  } else {
+    state.mode = "videos";
+    const label = SECTIONS[section].label;
+    setHeader(`${label.replace(/ /g, " ").split(" ")[0]} <em>${label.split(" ").slice(1).join(" ").toLowerCase()}.</em>`,
+              `Page ${page} — ${SECTIONS[section].label}.`);
+    await loadPage(section, page);
+  }
+}
+
+async function loadPage(section, page) {
+  $("#status").textContent = "loading…";
+  $("#grid").innerHTML = "";
+  $("#pager").innerHTML = "";
+  try {
+    const r = await fetch(`/api/section/${section}/page/${page}`);
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    renderCards(j.items || []);
+    renderPager(section, page);
+    $("#status").textContent = `${(j.items || []).length} items`;
+  } catch (e) {
+    $("#status").textContent = "error: " + e.message;
+  }
+}
+
+async function loadCategories() {
+  $("#status").textContent = "loading…";
+  $("#grid").innerHTML = "";
+  $("#pager").innerHTML = "";
+  try {
+    const r = await fetch("/api/section/categories");
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    renderCategoryCards(j.items || []);
+    $("#status").textContent = `${(j.items || []).length} categories`;
+  } catch (e) {
+    $("#status").textContent = "error: " + e.message;
+  }
+}
+
+function renderCards(items) {
+  const grid = $("#grid");
+  if (!items.length) {
+    grid.innerHTML = '<div class="empty">no items</div>';
+    return;
+  }
+  for (const it of items) {
+    const card = document.createElement("div");
+    card.className = "card";
+    const thumbStyle = it.thumb
+      ? `style="background-image:url('${it.thumb.replace(/'/g, "%27")}')"`
+      : "";
+    card.innerHTML = `
+      <div class="thumb" ${thumbStyle}>
+        <span class="tag">${SECTIONS[state.section]?.tag || "item"}</span>
+      </div>
+      <div class="body">
+        <h3 title="${escapeHtml(it.name)}">${escapeHtml(it.name)}</h3>
+        <p>${escapeHtml(new URL(it.url).pathname.replace(/^\/|\/$/g, "") || "—")}</p>
+      </div>`;
+    card.onclick = () => openItem(it);
+    grid.appendChild(card);
+  }
+}
+
+function renderCategoryCards(items) {
+  const grid = $("#grid");
+  if (!items.length) { grid.innerHTML = '<div class="empty">no categories</div>'; return; }
+  for (const it of items) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="body">
+        <h3>${escapeHtml(it.name)}</h3>
+        <p>${escapeHtml(new URL(it.url).pathname.replace(/^\/|\/$/g, ""))}</p>
+      </div>`;
+    card.onclick = () => loadSectionPageUrl(it.url);
+    grid.appendChild(card);
+  }
+}
+
+function renderPager(section, page) {
+  const pager = $("#pager");
+  pager.innerHTML = "";
+  const around = 4;
+  const start = Math.max(1, page - around);
+  const end = page + around;
+  for (let p = start; p <= end; p++) {
+    const b = document.createElement("button");
+    b.textContent = p;
+    if (p === page) b.classList.add("active");
+    b.onclick = () => loadSection(section, p);
+    pager.appendChild(b);
+  }
+}
+
+async function openItem(it) {
+  // if the item is a category, navigate; if a video page, resolve sources
+  if (state.mode === "categories") {
+    loadSectionPageUrl(it.url);
+    return;
+  }
+  if (state.mode === "channels") {
+    // channel page -> shows video cards
+    state.mode = "videos";
+    setHeader("Chan<em>nel.</em>", it.name);
+    return loadSectionPageUrl(it.url);
+  }
+  await playVideo(it.url);
+}
+
+async function loadSectionPageUrl(url) {
+  hidePlayer();
+  $("#status").textContent = "loading…";
+  $("#grid").innerHTML = "";
+  try {
+    const r = await fetch(`/api/video?url=${encodeURIComponent(url)}`);
+    // API /api/video returns sources; if empty, fall back to scraping video cards
+    const j = await r.json();
+    if (j.sources && j.sources.length) {
+      // this is actually a video page with sources
+      showPlayer(j.sources);
+      $("#status").textContent = `${j.sources.length} source(s)`;
+      return;
+    }
+    // otherwise treat as a section-like page
+    const r2 = await fetch(`/api/section/categories`);
+    // best-effort fallback: just show nothing useful; user can use nav
+    $("#status").textContent = "no sources on this page";
+  } catch (e) {
+    $("#status").textContent = "error: " + e.message;
+  }
+}
+
+async function playVideo(url) {
+  $("#status").textContent = "resolving sources…";
+  hidePlayer();
+  try {
+    const r = await fetch(`/api/video?url=${encodeURIComponent(url)}`);
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    if (!j.sources || !j.sources.length) {
+      $("#status").textContent = "no sources found";
+      return;
+    }
+    showPlayer(j.sources);
+    $("#status").textContent = `${j.sources.length} source(s)`;
+  } catch (e) {
+    $("#status").textContent = "error: " + e.message;
+  }
+}
+
+function showPlayer(sources) {
+  const wrap = $("#player");
+  const vid = $("#vid");
+  const srcs = $("#sources");
+  vid.src = sources[0].url;
+  vid.load();
+  srcs.innerHTML = "";
+  for (const s of sources) {
+    const a = document.createElement("a");
+    a.href = "#";
+    a.textContent = s.name || "source";
+    a.onclick = (e) => { e.preventDefault(); vid.src = s.url; vid.load(); vid.play(); };
+    srcs.appendChild(a);
+  }
+  wrap.classList.add("active");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function hidePlayer() {
+  $("#player").classList.remove("active");
+  $("#vid").pause();
+  $("#vid").removeAttribute("src");
+  $("#sources").innerHTML = "";
+}
+
+async function doSearch(e) {
+  e.preventDefault();
+  const q = $("#q").value.trim();
+  if (!q) return;
+  hidePlayer();
+  state.mode = "videos";
+  setHeader(`Search <em>${escapeHtml(q)}</em>`, "Results from alphaporno.com/search.");
+  $("#status").textContent = "searching…";
+  $("#grid").innerHTML = "";
+  $("#pager").innerHTML = "";
+  try {
+    const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    renderCards(j.items || []);
+    $("#status").textContent = `${(j.items || []).length} results`;
+  } catch (e) {
+    $("#status").textContent = "error: " + e.message;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// boot
+renderNav();
+loadSection("top", 1);
+</script>
+</body>
+</html>
